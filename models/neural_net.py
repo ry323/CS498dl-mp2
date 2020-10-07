@@ -1,7 +1,6 @@
 """Neural network model."""
 
 from typing import Sequence
-from scipy.special import softmax
 
 import numpy as np
 class NeuralNetwork:
@@ -66,7 +65,7 @@ class NeuralNetwork:
             the output (N, H)
         """
         # TODO: implement me
-
+        
         return X.dot(W) + b
 
     def relu(self, X: np.ndarray) -> np.ndarray:
@@ -79,7 +78,8 @@ class NeuralNetwork:
             the output
         """
         # TODO: implement me
-        return np.where(X < 0, 0 , X)
+        # return np.where(X < 0, 0 , X)
+        return np.maximum(X,0)
 
     def softmax(self, X: np.ndarray) -> np.ndarray:
         """The softmax function.
@@ -90,10 +90,10 @@ class NeuralNetwork:
         Returns:
             the output
         """
-        # TODO: implement me
-        
+        # TODO: implement me        
         exp_X = np.exp(X - np.max(X, axis = 1).reshape(-1,1))
         return exp_X / np.sum(exp_X, axis = 1).reshape(-1,1)
+
 
     def forward(self, X: np.ndarray) -> np.ndarray:
         """Compute the scores for each class for all of the data samples.
@@ -114,19 +114,20 @@ class NeuralNetwork:
         # self.linear, self.relu, and self.softmax in here.
 
         self.outputs = {}
-        output = X.copy()
+        output = X
         for i in range(1, self.num_layers + 1 ):
             # linear layer
             output = self.linear(self.params["W" + str(i)], output, self.params["b"+ str(i)])
             self.outputs["linear" + str(i)] = output
             # relu layer
-            if (i != self.num_layers):    
+            if (i < self.num_layers):    
                 output = self.relu(output)
                 self.outputs["relu" + str(i)] = output
             # softmax 
             else:
                 output = self.softmax(output)
                 self.outputs["softmax"] = output
+
 
         return output
 
@@ -160,7 +161,7 @@ class NeuralNetwork:
         """
         W_grad = X.T.dot(G)
         b_grad = np.sum(G, axis = 0)
-        G =  G.dot(W_grad.T)
+        G =  G.dot(self.params["W" + str(i)].T)
         return W_grad, b_grad, G
 
     def softmax_grad(self, X,Y, reg):
@@ -174,8 +175,11 @@ class NeuralNetwork:
         Returns:
             gradient of X
         """
-        X[:, Y] -= 1
-        return X / np.shape(X)[0]
+        N = np.shape(X)[0]
+        X_tmp = X.copy()
+        X_tmp[np.arange(N), Y]-= 1
+        X_tmp /= N
+        return X_tmp
 
     def update_grad(self, lr):
         for i in range (1 ,self.num_layers+1):
@@ -196,13 +200,12 @@ class NeuralNetwork:
         """
         loss = 0.0
         # cross_entropy loss
-        loss -= np.sum(np.log(output[:, Y])) 
-        loss /= np.shape(output)[0]
+        N = np.shape(output)[0]
+        loss = np.sum(-np.log(output[np.arange(N), Y])) / N
 
-        # regularization
         for i in range(1, self.num_layers + 1):
             W = self.params["W" + str(i)]
-            loss += np.sum(W * W) * reg *0.5
+            loss += np.sum(W*W) * reg *0.5 / N
 
         return loss 
 
@@ -235,6 +238,7 @@ class NeuralNetwork:
 
         output = self.outputs["softmax"]
         loss = self.get_loss(output, y, reg)
+        self.outputs["relu" + str(0)] = X
 
         for i in range(self.num_layers, 0, -1):
             W = "W" + str(i)
@@ -249,15 +253,12 @@ class NeuralNetwork:
                 G = self.relu_grad(X_input, G, i)
 
             # backward linear layer
-            if (i == 1):
-                X_input = X.copy()
-            else:
-                X_input = self.outputs["relu" +str(i-1)] 
+            X_input = self.outputs["relu" +str(i-1)] 
             W_grad, b_grad, G = self.linear_grad(X_input, G, i)
             
             # save gradients
-            self.gradients[W] = W_grad.copy() + reg * self.params[W] 
-            self.gradients[b] = b_grad.copy() 
+            self.gradients[W] = W_grad + reg * self.params[W] 
+            self.gradients[b] = b_grad 
 
         # SGD
         self.update_grad(lr)
